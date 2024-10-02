@@ -1,0 +1,80 @@
+name: Build Docker Images
+
+# reusable workflow, do not add triggers
+on:
+  workflow_call:
+  workflow_dispatch:
+
+env:
+  repo_names: |
+    ghcr.io/${{ github.repository }}
+
+jobs:
+  build-images:
+    name: Build ${{ matrix.os }}/${{ matrix.arch }}
+    runs-on: ${{ format('burnt-labs-{0}', matrix.arch) }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - linux
+        arch:
+          - amd64
+          - arm64
+
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up docker buildx for push
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+          platforms: ${{ matrix.os }}/${{ matrix.arch }}
+
+      - name: Prepare environment
+        run: |
+          echo "TAG_VERSION=${GITHUB_SHA:0:7}" | tee -a $GITHUB_ENV
+          echo "CONTAINER=$(basename $(echo ${{ env.repo_names }} | head -n1 ))" | tee -a $GITHUB_ENV
+          echo "DOCKER_FN=$CONTAINER-${{ matrix.os }}-${{ matrix.arch }}.tar" | tee -a $GITHUB_ENV
+
+      - name: Metadata for container
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.repo_names }}
+          tags: |
+            type=sha
+
+      - name: Build Docker Image
+        id: build-docker
+        uses: docker/build-push-action@v5
+        with:
+          target: release
+          push: false
+          load: true
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: ${{ matrix.os }}/${{ matrix.arch }}
+          tags: ${{ steps.meta.outputs.tags }}
+
+      - name: Save Docker Image
+        working-directory: ${{ runner.temp }}
+        run: |
+          docker save ${{ steps.meta.outputs.tags }} > ${{ runner.temp }}/${DOCKER_FN}
+
+      - name: Upload Docker Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DOCKER_FN }}
+          path: ${{ runner.temp }}/${{ env.DOCKER_FN }}
+          if-no-files-found: error
+          retention-days: 3
