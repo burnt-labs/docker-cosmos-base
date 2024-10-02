@@ -30,7 +30,6 @@ jobs:
       - name: Set up docker buildx for push
         uses: docker/setup-buildx-action@v3
         with:
-          driver: docker
           platforms: ${{ env.platforms }}
 
       - name: Metadata for container
