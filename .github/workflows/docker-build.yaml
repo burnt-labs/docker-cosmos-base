@@ -48,7 +48,6 @@ jobs:
         with:
           target: release
           push: true
-          load: true
           labels: ${{ steps.meta.outputs.labels }}
           platforms: ${{ env.platforms }}
           tags: ${{ steps.meta.outputs.tags }}
