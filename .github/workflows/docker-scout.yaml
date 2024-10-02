@@ -29,18 +29,13 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-      - name: Download images
-        uses: actions/download-artifact@v4
+      - name: Metadata for container
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          path: ${{ runner.temp }}
-          pattern: docker-${{ matrix.os }}-${{ matrix.arch }}.tar
-          merge-multiple: true
-
-      - name: Load images
-        working-directory: ${{ runner.temp }}
-        run: |
-          ls -la
-          docker load < ${{ env.DOCKER_FN }}
+          images: ${{ env.repo_names }}
+          tags: |
+            type=raw,value={{sha}}
 
       - name: Run Docker Scout
         uses: docker/scout-action@v1
@@ -48,4 +43,4 @@ jobs:
           command: cves
           only-fixed: true
           platform: ${{ matrix.os }}/${{ matrix.arch }}
-          image: xion:${{ matrix.os }}-${{ matrix.arch }}
+          image: ${{ steps.meta.outputs.tags }}

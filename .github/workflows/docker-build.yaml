@@ -8,20 +8,12 @@ on:
 env:
   repo_names: |
     ghcr.io/${{ github.repository }}
+  platforms: linux/amd64,linux/arm64
 
 jobs:
-  build-images:
-    name: Build ${{ matrix.os }}/${{ matrix.arch }}
-    runs-on: ${{ format('burnt-labs-{0}', matrix.arch) }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - linux
-        arch:
-          - amd64
-          - arm64
+  build-docker-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
 
     permissions:
       id-token: write
@@ -39,13 +31,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker
-          platforms: ${{ matrix.os }}/${{ matrix.arch }}
-
-      - name: Prepare environment
-        run: |
-          echo "TAG_VERSION=${GITHUB_SHA:0:7}" | tee -a $GITHUB_ENV
-          echo "CONTAINER=$(basename $(echo ${{ env.repo_names }} | head -n1 ))" | tee -a $GITHUB_ENV
-          echo "DOCKER_FN=$CONTAINER-${{ matrix.os }}-${{ matrix.arch }}.tar" | tee -a $GITHUB_ENV
+          platforms: ${{ env.platforms }}
 
       - name: Metadata for container
         id: meta
@@ -53,28 +39,16 @@ jobs:
         with:
           images: ${{ env.repo_names }}
           tags: |
-            type=sha
+            type=raw,value={{sha}}
+            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build Docker Image
         id: build-docker
         uses: docker/build-push-action@v5
         with:
           target: release
-          push: false
+          push: true
           load: true
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: ${{ matrix.os }}/${{ matrix.arch }}
+          platforms: ${{ env.platforms }}
           tags: ${{ steps.meta.outputs.tags }}
-
-      - name: Save Docker Image
-        working-directory: ${{ runner.temp }}
-        run: |
-          docker save ${{ steps.meta.outputs.tags }} > ${{ runner.temp }}/${DOCKER_FN}
-
-      - name: Upload Docker Image
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.DOCKER_FN }}
-          path: ${{ runner.temp }}/${{ env.DOCKER_FN }}
-          if-no-files-found: error
-          retention-days: 3
